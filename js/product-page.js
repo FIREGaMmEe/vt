@@ -41,7 +41,8 @@ import { fmt, fmtDate, today, showToast, openModal, closeModal, esc, renderPayme
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           ${p.status==='in_stock'
             ? `<button class="btn btn-success" id="sell-btn">💸 Mark as Sold</button>`
-            : `<a href="invoice.html?id=${p.id}" class="btn btn-outline">🧾 Sales Note</a>`}
+            : `<a href="invoice.html?id=${p.id}" class="btn btn-outline">🧾 Sales Note</a>
+               <button class="btn btn-outline btn-sm" id="edit-sale-btn">✏️ Edit Sale</button>`}
           <button class="btn btn-outline btn-sm" id="edit-btn">✏️ Edit</button>
           <button class="btn btn-outline btn-sm" id="del-btn" style="border-color:var(--danger);color:var(--danger);">🗑</button>
         </div>
@@ -124,6 +125,32 @@ import { fmt, fmtDate, today, showToast, openModal, closeModal, esc, renderPayme
         </div>
       </div>
 
+      <!-- Edit Sale Modal -->
+      ${p.status === 'sold' ? `
+      <div class="modal-overlay" id="edit-sale-modal">
+        <div class="modal" style="max-width:580px;">
+          <div class="modal-header"><h3>✏️ Edit Sale</h3><button class="btn btn-ghost" onclick="closeModal('edit-sale-modal')">✕</button></div>
+          <div class="modal-body" style="max-height:75vh;overflow-y:auto;">
+            <div id="edit-sale-alert"></div>
+            <div class="form-row">
+              <div class="form-group"><label class="form-label">Sell Price (₹) <span class="req">*</span></label><input type="number" id="es-price" class="form-control" value="${p.sell_price||''}" min="0" /></div>
+              <div class="form-group"><label class="form-label">Sell Date <span class="req">*</span></label><input type="date" id="es-date" class="form-control" value="${p.sell_date||''}" /></div>
+            </div>
+            <div class="form-row">
+              <div class="form-group"><label class="form-label">Buyer Name <span class="req">*</span></label><input type="text" id="es-buyer" class="form-control" value="${esc(p.buyer_name||'')}" /></div>
+              <div class="form-group"><label class="form-label">Buyer Contact</label><input type="tel" id="es-contact" class="form-control" value="${esc(p.buyer_contact||'')}" /></div>
+            </div>
+            <div class="form-group"><label class="form-label">Remark</label><textarea id="es-remark" class="form-control">${esc(p.sell_remark||'')}</textarea></div>
+            <div style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);padding-bottom:10px;border-bottom:1px solid var(--border);margin:16px 0;">💳 Payment Mode</div>
+            <div id="edit-sale-payment-ui"></div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeModal('edit-sale-modal')">Cancel</button>
+            <button class="btn btn-primary" id="save-sale-btn">💾 Save Sale</button>
+          </div>
+        </div>
+      </div>` : ''}
+
       <!-- Delete Modal -->
       <div class="modal-overlay" id="del-modal">
         <div class="modal">
@@ -165,6 +192,71 @@ import { fmt, fmtDate, today, showToast, openModal, closeModal, esc, renderPayme
 
     document.getElementById('edit-btn')?.addEventListener('click', () => openModal('edit-modal'));
     document.getElementById('del-btn')?.addEventListener('click', () => openModal('del-modal'));
+
+    // Edit sale button — open modal and init payment UI pre-set to current mode
+    document.getElementById('edit-sale-btn')?.addEventListener('click', () => {
+      openModal('edit-sale-modal');
+      // Use prefix 'es' (edit-sale) so IDs don't clash with the sell modal ('sell')
+      collectEditSalePayment = renderPaymentUI('edit-sale-payment-ui', 'es', () => {});
+      // Pre-select the current payment mode tab
+      if (p.sell_payment_mode) {
+        const tabs = document.querySelectorAll('#edit-sale-payment-ui .pay-tab-btn');
+        tabs.forEach(t => {
+          if (t.dataset.mode === p.sell_payment_mode) t.click();
+        });
+      }
+      // Pre-fill payment amounts after tab click re-renders fields
+      setTimeout(() => {
+        const mode = p.sell_payment_mode;
+        if (mode === 'cash') {
+          const el = document.getElementById('es-cash'); if (el) el.value = p.sell_cash_amount || p.sell_price || '';
+        } else if (mode === 'upi') {
+          const el = document.getElementById('es-upi'); if (el) el.value = p.sell_upi_amount || '';
+          const ref = document.getElementById('es-upi-ref'); if (ref) ref.value = p.sell_upi_ref || '';
+        } else if (mode === 'mix') {
+          const c = document.getElementById('es-cash'); if (c) c.value = p.sell_cash_amount || '';
+          const u = document.getElementById('es-upi');  if (u) u.value = p.sell_upi_amount  || '';
+          const ref = document.getElementById('es-upi-ref'); if (ref) ref.value = p.sell_upi_ref || '';
+        } else if (mode === 'due') {
+          const paid = (p.sell_cash_amount||0) + (p.sell_upi_amount||0);
+          const pn = document.getElementById('es-paid-now'); if (pn) pn.value = paid || '';
+          const due = document.getElementById('es-due'); if (due) due.value = p.sell_due_amount || '';
+        }
+      }, 80);
+    });
+
+    // Save edited sale
+    document.getElementById('save-sale-btn')?.addEventListener('click', async () => {
+      const alertEl = document.getElementById('edit-sale-alert');
+      alertEl.innerHTML = '';
+      const sell_price    = parseFloat(document.getElementById('es-price').value);
+      const buyer_name    = document.getElementById('es-buyer').value.trim();
+      const buyer_contact = document.getElementById('es-contact').value.trim() || null;
+      const sell_date     = document.getElementById('es-date').value;
+      const sell_remark   = document.getElementById('es-remark').value.trim() || null;
+
+      if (isNaN(sell_price) || sell_price < 0) return alertEl.innerHTML = '<div class="alert alert-danger">Enter a valid sell price.</div>';
+      if (!buyer_name) return alertEl.innerHTML = '<div class="alert alert-danger">Buyer name is required.</div>';
+      if (!sell_date)  return alertEl.innerHTML = '<div class="alert alert-danger">Sell date is required.</div>';
+
+      const payData = collectEditSalePayment
+        ? collectEditSalePayment(sell_price)
+        : { fields: { sell_payment_mode: 'cash', sell_cash_amount: sell_price } };
+      if (payData.error) return alertEl.innerHTML = `<div class="alert alert-danger">${payData.error}</div>`;
+
+      const btn = document.getElementById('save-sale-btn');
+      btn.disabled = true; btn.innerHTML = 'Saving...';
+      const { error } = await supabase.from('products').update({
+        sell_price, buyer_name, buyer_contact, sell_date, sell_remark,
+        ...payData.fields
+      }).eq('id', p.id);
+      btn.disabled = false; btn.innerHTML = '💾 Save Sale';
+      if (error) return alertEl.innerHTML = `<div class="alert alert-danger">${error.message}</div>`;
+      showToast('Sale updated!', 'success');
+      closeModal('edit-sale-modal');
+      const { data: fresh } = await supabase.from('products').select('*').eq('id', p.id).single();
+      if (fresh) { p = fresh; render(fresh); }
+    });
 
     // Confirm sell
     document.getElementById('confirm-sell-btn')?.addEventListener('click', async () => {
@@ -260,7 +352,8 @@ import { fmt, fmtDate, today, showToast, openModal, closeModal, esc, renderPayme
   }
 
   // ─────────────────────────────────────────
-  let collectSellPayment = null;
+  let collectSellPayment     = null;
+  let collectEditSalePayment = null;
 
   function renderPhotos(p) {
     if (!p.photo_url) return '';

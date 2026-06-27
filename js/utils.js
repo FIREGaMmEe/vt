@@ -193,16 +193,17 @@ export function genId() {
 }
 
 // ── Sales Note year-month prefix ──
-// Format: YYAAMM  e.g. April 2026 → "26BB04"
-// Year letter: 2025=AA, 2026=BB, 2027=CC, etc.
+// Format: YYAAMM  e.g. April 2026 → "26AA04"
+// Year letter pair: 2026=AA, 2027=BB, 2028=CC, etc.
 export function getYearCode() {
-  const now    = new Date();
-  const year   = now.getFullYear();
-  const yy     = String(year).slice(2);
-  const idx    = year - 2026; // 0=AA,1=BB,2=CC...
-  const letter = String.fromCharCode(65 + (idx % 26));
-  const mm     = String(now.getMonth() + 1).padStart(2, '0');
-  return yy + letter + letter + '1' + mm; // e.g. "26BB04"
+  const now  = new Date();
+  const year = now.getFullYear();
+  const yy   = String(year).slice(2);
+  const idx  = year - 2026; // 0=AA, 1=BB, 2=CC ...
+  const base = 65 + (idx % 26);
+  const pair = String.fromCharCode(base) + String.fromCharCode(base); // "AA", "BB", etc.
+  const mm   = String(now.getMonth() + 1).padStart(2, '0');
+  return yy + pair + mm; // e.g. "26AA04"
 }
 
 // ── Payment UI builder ──

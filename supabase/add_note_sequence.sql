@@ -38,6 +38,6 @@ BEGIN
   DO UPDATE SET last_seq = note_sequences.last_seq + 1
   RETURNING last_seq INTO v_seq;
 
-  RETURN p_year_code || LPAD(v_seq::TEXT, 3, '0');
+  RETURN p_year_code || '1' || LPAD(v_seq::TEXT, 2, '0');
 END;
 $$;

@@ -111,7 +111,7 @@
         p_store_id: user.profile?.store_id,
         p_year_code: yearCode
       });
-      noteNo = seqData || (yearCode + '001');
+      noteNo = seqData || (yearCode + '101');
       // Persist so the same number shows every time
       await supabase.from('products').update({ note_number: noteNo }).eq('id', p.id);
     }
